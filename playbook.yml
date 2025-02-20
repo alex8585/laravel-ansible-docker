@@ -1,0 +1,136 @@
+- name: Install Laravel and configure Nginx
+  hosts: localhost
+  become: yes
+  become_user: root  
+  vars_files:
+    - vars.yml
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+
+  vars_prompt:
+    - name: db_and_folder_name
+      prompt: "Database name AND site folder root name:"
+      default: lara10
+      private: no
+
+  tasks:
+    - name: Install PyMySQL
+      pip:
+        name: PyMySQL
+        state: present
+
+    - name: Check if Nginx container is running
+      command: "docker ps --filter 'name=nginx' -q"
+      register: nginx_container
+      changed_when: false
+      failed_when: false
+
+    - name: Display the value of nginx_info variable
+      debug:
+        msg: "{{ nginx_container.stdout }}"
+
+    - name: Start container using docker-compose if not running
+      # command: docker-compose up -d nginx mysql phpmyadmin workspace
+      command: docker-compose up -d nginx 
+      args:
+        chdir: '{{ path_to_docker_compose }}'
+      when: " nginx_container.stdout == '' "
+
+    - name: Check if Workspace container is running
+      command: "docker ps --filter 'name=workspace' -q"
+      register: workspace_container
+      changed_when: false
+      failed_when: false
+
+    - name: Display the value of workspace variable
+      debug:
+        msg: "{{ workspace_container.stdout }}"
+
+    - name: Start container using docker-compose if not running
+      command: docker-compose up workspace -d 
+      args:
+        chdir: '{{ path_to_docker_compose }}'
+      when: " workspace_container.stdout == '' "
+
+    - name: Check if Mysql container is running
+      command: "docker ps --filter 'name=mysql' -q"
+      register: mysql_container
+      changed_when: false
+      failed_when: false
+
+    - name: Display the value of mysql variable
+      debug:
+        msg: "{{ mysql_container.stdout }}"
+
+    - name: Start container using docker-compose if not running
+      command: docker-compose up mysql -d 
+      args:
+        chdir: '{{ path_to_docker_compose }}'
+      when: " mysql_container.stdout == '' "
+
+    - name: Check if PhpMyadmin container is running
+      command: "docker ps --filter 'name=phpmyadmin' -q"
+      register: myadmin_container
+      changed_when: false
+      failed_when: false
+
+    - name: Display the value of mysql variable
+      debug:
+        msg: "{{ myadmin_container.stdout }}"
+
+    - name: Start container using docker-compose if not running
+      command: docker-compose up phpmyadmin -d 
+      args:
+        chdir: '{{ path_to_docker_compose }}'
+      when: " myadmin_container.stdout == '' "
+
+    - name: Create Laravel database
+      community.mysql.mysql_db:
+        name: "{{ db_and_folder_name }}"
+        state: present
+        login_host: "{{ inner_db_host }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_password }}"
+
+    - name: Install laravel cli
+      community.docker.docker_container_exec:
+        container: "{{ workspace_container.stdout }}"
+        command: composer global require laravel/installer
+        chdir: /var/www/
+
+    - name: Install Laravel
+      community.docker.docker_container_exec:
+        container: "{{ workspace_container.stdout }}"
+        command: /root/.config/composer/vendor/bin/laravel new "{{ db_and_folder_name }}"
+        chdir: /var/www/
+
+    - name: Change owner and group of the folder recursively
+      file:
+        path: "{{ host_projects_dir }}/{{ db_and_folder_name }}"
+        owner: alex
+        group: alex
+        recurse: yes
+
+    - name: Restart Nginx inside the container
+      command: docker exec "{{ nginx_container_name }}" nginx -s reload
+
+    - name: Create .env from template
+      template:
+        src: .evn.j2
+        dest: "{{ host_projects_dir }}/{{ db_and_folder_name }}/.env"
+        owner: alex
+        group: alex
+        mode: '0644'
+
+    - name: php artisan migrate
+      community.docker.docker_container_exec:
+        container: "{{ workspace_container.stdout }}"
+        command: php artisan migrate
+        chdir: "/var/www/{{ db_and_folder_name }}"
+
+    - name: npm install && npm run build      
+      community.docker.docker_container_exec:
+        container: "{{ workspace_container.stdout }}"
+        command: "sh -c 'npm install && npm run build'"    
+        chdir: "/var/www/{{ db_and_folder_name }}"
+

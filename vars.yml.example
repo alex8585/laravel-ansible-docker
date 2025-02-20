@@ -1,0 +1,14 @@
+db_user: root
+db_password: root
+db_host: mysql
+
+admin_user: user
+admin_password: passwd
+admin_email: test@gmail.com
+
+inner_db_host: 127.0.0.1
+path_to_docker_compose: /home/alex/new_data/projects/laradock
+host_projects_dir: /home/alex/new_data/projects
+nginx_container_name: laradock-nginx-1
+
+
