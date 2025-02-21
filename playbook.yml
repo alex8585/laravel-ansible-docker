@@ -101,7 +101,7 @@
     - name: Install Laravel
       community.docker.docker_container_exec:
         container: "{{ workspace_container.stdout }}"
-        command: /root/.config/composer/vendor/bin/laravel new "{{ db_and_folder_name }} -n"
+        command: /root/.config/composer/vendor/bin/laravel -n new "{{ db_and_folder_name }}"
         chdir: /var/www/
 
     - name: Change owner and group of the folder recursively
